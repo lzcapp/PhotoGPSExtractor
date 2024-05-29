@@ -7,7 +7,7 @@ var folderPath = Console.ReadLine();
 
 if (Directory.Exists(folderPath)) {
     try {
-        var photoFiles = Directory.GetFiles(folderPath, "*.jpg", SearchOption.AllDirectories);
+        var photoFiles = Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories);
 
         var locationList = new List<LocationData>();
 
