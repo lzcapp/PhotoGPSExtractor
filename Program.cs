@@ -7,11 +7,11 @@ var folderPath = Console.ReadLine();
 
 if (Directory.Exists(folderPath)) {
     try {
-        var photoFiles = Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories);
+        var files = Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories);
 
         var locationList = new List<LocationData>();
 
-        foreach (var file in photoFiles) {
+        foreach (var file in files) {
             try {
                 var directories = ImageMetadataReader.ReadMetadata(file);
                 GpsDirectory? gps = directories.OfType<GpsDirectory>().FirstOrDefault();
