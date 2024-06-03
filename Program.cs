@@ -48,7 +48,7 @@ if (Directory.Exists(folderPath)) {
 
         using var writer = new StreamWriter(csvFilePath);
 
-        writer.WriteLine("Latitude,Longitude,Altitude,Unix Timestamp");
+        writer.WriteLine("Latitude,Longitude,Altitude,Timestamp");
 
         foreach (var strGpsData in sortedLocationList.Select(locationData => new List<string> {
             $"{locationData.Latitude}", $"{locationData.Longitude}", $"{locationData.Altitude}", $"{locationData.Timestamp}"
