@@ -65,10 +65,10 @@ if (Directory.Exists(folderPath)) {
 }
 
 public class LocationData {
-    public double Latitude { get; set; }
-    public double Longitude { get; set; }
-    public decimal Altitude { get; set; }
-    public long Timestamp { get; set; }
+    public double Latitude { get; }
+    public double Longitude { get; }
+    public decimal Altitude { get; }
+    public long Timestamp { get; }
 
     public LocationData(double latitude, double longitude, decimal altitude, long timestamp) {
         Latitude = latitude;
