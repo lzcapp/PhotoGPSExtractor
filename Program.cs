@@ -23,7 +23,7 @@ if (Directory.Exists(folderPath)) {
                     if (gps.ContainsTag(GpsDirectory.TagAltitude)) {
                         altitude = (decimal)gps.GetDouble(GpsDirectory.TagAltitude);
                         var altRef = gps.GetDescription(GpsDirectory.TagAltitudeRef);
-                        if (altRef == "Below sea level") {
+                        if (altRef != null && altRef.Trim().Equals("Below sea level", StringComparison.OrdinalIgnoreCase)) {
                             altitude *= -1;
                         }
                     }
