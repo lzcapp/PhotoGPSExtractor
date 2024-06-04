@@ -32,7 +32,6 @@ if (Directory.Exists(folderPath)) {
                         exifSub.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out DateTime timestampX);
                         timestamp = new DateTimeOffset(timestampX).ToUnixTimeMilliseconds();
                     }
-
                     if (location != null) {
                         locationList.Add(new LocationData(location.Latitude, location.Longitude, altitude, timestamp));
                     }
