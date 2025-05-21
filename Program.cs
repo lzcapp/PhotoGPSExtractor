@@ -19,13 +19,13 @@ namespace PhotoGPSExtractor {
                 foreach (var file in files) {
                     try {
                         var directories = ImageMetadataReader.ReadMetadata(file);
-                        GpsDirectory? gps = directories.OfType<GpsDirectory>().FirstOrDefault();
-                        ExifSubIfdDirectory? exifSub = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+                        var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
+                        var exifSub = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
 
                         if (gps == null) {
                             continue;
                         }
-                        GeoLocation? location = gps.GetGeoLocation();
+                        var location = gps.GetGeoLocation();
                         decimal altitude = 0;
                         if (gps.ContainsTag(GpsDirectory.TagAltitude)) {
                             altitude = (decimal)gps.GetDouble(GpsDirectory.TagAltitude);
@@ -36,7 +36,7 @@ namespace PhotoGPSExtractor {
                         }
                         long timestamp = 0;
                         if (exifSub != null) {
-                            exifSub.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out DateTime timestampX);
+                            exifSub.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var timestampX);
                             timestamp = new DateTimeOffset(timestampX).ToUnixTimeMilliseconds();
                         }
                         if (location != null) {
