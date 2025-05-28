@@ -4,26 +4,16 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 
-namespace PhotoGPSExtractor
-{
-    public static class Program
-    {
-        private static readonly HashSet<string> PhotoExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff",
-            ".heic", ".webp", ".arw", ".cr2", ".nef", ".orf", ".raf", ".dng"
-        };
-
-        private static readonly EnumerationOptions FastEnumerationOptions = new()
-        {
+namespace PhotoGPSExtractor {
+    public static class Program {
+        private readonly static EnumerationOptions FastEnumerationOptions = new() {
             IgnoreInaccessible = true,
             RecurseSubdirectories = true,
             MatchCasing = MatchCasing.CaseInsensitive,
             AttributesToSkip = FileAttributes.System | FileAttributes.Temporary
         };
 
-        public static async Task Main()
-        {
+        public static async Task Main() {
             Console.WriteLine("Photo GPS Metadata Extractor");
             Console.WriteLine("----------------------------");
 
@@ -32,12 +22,10 @@ namespace PhotoGPSExtractor
 
             var stopwatch = Stopwatch.StartNew();
 
-            try
-            {
+            try {
                 // Phase 1: Parallel file discovery
                 var (files, discoveryTime) = await FindPhotoFilesAsync(folderPath);
-                if (files.Count == 0)
-                {
+                if (files.Count == 0) {
                     Console.WriteLine("No supported photo files found!");
                     return;
                 }
@@ -52,27 +40,22 @@ namespace PhotoGPSExtractor
                 Console.WriteLine($"- Discovery: {discoveryTime.TotalSeconds:0.00}s");
                 Console.WriteLine($"- Processing: {processingTime.TotalSeconds:0.00}s");
                 Console.WriteLine($"- {locations.Count} locations extracted");
-            }
-            catch (Exception ex)
-            {
+            } catch (Exception ex) {
                 Console.WriteLine($"\nFatal error: {ex.Message}");
                 Debug.WriteLine(ex.ToString());
             }
         }
 
-        private static string? GetFolderPath()
-        {
+        private static string? GetFolderPath() {
             Console.Write("Folder path (or drag folder here): ");
             var input = Console.ReadLine()?.Trim('"').Trim();
 
-            if (string.IsNullOrWhiteSpace(input))
-            {
+            if (string.IsNullOrWhiteSpace(input)) {
                 Console.WriteLine("No path provided");
                 return null;
             }
 
-            if (!System.IO.Directory.Exists(input))
-            {
+            if (!System.IO.Directory.Exists(input)) {
                 Console.WriteLine("Directory does not exist!");
                 return null;
             }
@@ -80,8 +63,7 @@ namespace PhotoGPSExtractor
             return input;
         }
 
-        private static async Task<(List<string> Files, TimeSpan DiscoveryTime)> FindPhotoFilesAsync(string folderPath)
-        {
+        private static async Task<(List<string> Files, TimeSpan DiscoveryTime)> FindPhotoFilesAsync(string folderPath) {
             Console.WriteLine("\nDiscovering photo files...");
             var stopwatch = Stopwatch.StartNew();
 
@@ -89,18 +71,15 @@ namespace PhotoGPSExtractor
             var lastReport = Stopwatch.GetTimestamp();
             var totalFiles = 0;
 
-            await Task.Run(() =>
-            {
-                Parallel.ForEach(System.IO.Directory.EnumerateFiles(folderPath, "*.*", FastEnumerationOptions), file =>
-                {
-                    if (PhotoExtensions.Contains(Path.GetExtension(file)))
-                    {
+            await Task.Run(() => {
+                Parallel.ForEach(System.IO.Directory.EnumerateFiles(folderPath, "*.*", FastEnumerationOptions), file => {
+                    var directories = ImageMetadataReader.ReadMetadata(file);
+                    if (directories.Any(d => d is ExifIfd0Directory or ExifSubIfdDirectory)) {
                         files.Add(file);
                         totalFiles = files.Count;
 
                         // Throttled progress reporting
-                        if (Stopwatch.GetTimestamp() - lastReport > Stopwatch.Frequency / 4)
-                        {
+                        if (Stopwatch.GetTimestamp() - lastReport > Stopwatch.Frequency / 4) {
                             Console.Write($"\rFound {totalFiles} files...");
                             lastReport = Stopwatch.GetTimestamp();
                         }
@@ -113,8 +92,7 @@ namespace PhotoGPSExtractor
         }
 
         private static async Task<(List<LocationData> Locations, TimeSpan ProcessingTime)> ProcessFilesAsync(
-            List<string> files)
-        {
+            List<string> files) {
             Console.WriteLine("\n\nProcessing files...");
             var stopwatch = Stopwatch.StartNew();
 
@@ -122,24 +100,16 @@ namespace PhotoGPSExtractor
             var progress = new ProgressReporter(files.Count);
             var options = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount };
 
-            await Task.Run(() =>
-            {
-                Parallel.ForEach(files, options, file =>
-                {
-                    try
-                    {
+            await Task.Run(() => {
+                Parallel.ForEach(files, options, file => {
+                    try {
                         var location = ProcessSingleFile(file);
-                        if (location != null)
-                        {
+                        if (location != null) {
                             locations.Add(location);
                         }
-                    }
-                    catch (Exception ex)
-                    {
+                    } catch (Exception ex) {
                         Debug.WriteLine($"Error processing {file}: {ex.Message}");
-                    }
-                    finally
-                    {
+                    } finally {
                         progress.ReportProgress();
                     }
                 });
@@ -148,8 +118,7 @@ namespace PhotoGPSExtractor
             return (locations.OrderBy(l => l.Timestamp).ToList(), stopwatch.Elapsed);
         }
 
-        private static LocationData? ProcessSingleFile(string filePath)
-        {
+        private static LocationData? ProcessSingleFile(string filePath) {
             var directories = ImageMetadataReader.ReadMetadata(filePath);
             var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
             if (gps == null) return null;
@@ -159,12 +128,10 @@ namespace PhotoGPSExtractor
 
             // Extract altitude
             decimal altitude = 0;
-            if (gps.ContainsTag(GpsDirectory.TagAltitude))
-            {
+            if (gps.ContainsTag(GpsDirectory.TagAltitude)) {
                 altitude = Math.Abs((decimal)gps.GetDouble(GpsDirectory.TagAltitude));
                 if (gps.GetDescription(GpsDirectory.TagAltitudeRef)?
-                        .Trim().Equals("Below sea level", StringComparison.OrdinalIgnoreCase) == true)
-                {
+                        .Trim().Equals("Below sea level", StringComparison.OrdinalIgnoreCase) == true) {
                     altitude *= -1;
                 }
             }
@@ -172,8 +139,7 @@ namespace PhotoGPSExtractor
             // Extract timestamp
             long timestamp = 0;
             var exifSub = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
-            if (exifSub?.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dt) == true)
-            {
+            if (exifSub?.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dt) == true) {
                 timestamp = new DateTimeOffset(dt).ToUnixTimeMilliseconds();
             }
 
@@ -185,21 +151,18 @@ namespace PhotoGPSExtractor
             );
         }
 
-        private static List<LocationData> DeduplicateLocations(List<LocationData> locations, int precision = 6)
-        {
+        private static List<LocationData> DeduplicateLocations(List<LocationData> locations, int precision = 6) {
             var uniqueKeys = new HashSet<Tuple<double, double>>();
             var result = new List<LocationData>();
 
-            foreach (var loc in locations)
-            {
+            foreach (var loc in locations) {
                 // 精度缩减
                 var roundedLat = Math.Round(loc.Latitude, precision);
                 var roundedLon = Math.Round(loc.Longitude, precision);
                 var key = Tuple.Create(roundedLat, roundedLon);
 
                 // 去重判断
-                if (uniqueKeys.Add(key))
-                {
+                if (uniqueKeys.Add(key)) {
                     result.Add(new LocationData(
                         roundedLat,
                         roundedLon,
@@ -212,8 +175,7 @@ namespace PhotoGPSExtractor
             return result;
         }
 
-        private static async Task ExportResultsAsync(List<LocationData> locations)
-        {
+        private static async Task ExportResultsAsync(List<LocationData> locations) {
             var tasks = new List<Task>
             {
                 Task.Run(() =>
@@ -225,50 +187,41 @@ namespace PhotoGPSExtractor
             await Task.WhenAll(tasks);
         }
 
-        private static void ExportToCsv(List<LocationData> locations)
-        {
+        private static void ExportToCsv(List<LocationData> locations) {
             const string csvPath = "data.csv";
             using var writer = new StreamWriter(csvPath);
 
             writer.WriteLine("Latitude,Longitude,Altitude,Timestamp,FileName,FilePath");
-            foreach (var loc in locations)
-            {
+            foreach (var loc in locations) {
                 writer.WriteLine($"{loc.Latitude},{loc.Longitude},{loc.Altitude},{loc.Timestamp}");
             }
 
             Console.WriteLine($"\nCSV exported to {csvPath}");
         }
 
-        private static void ExportToGeoJson(List<LocationData> locations)
-        {
+        private static void ExportToGeoJson(List<LocationData> locations) {
             var geoJsonPath = "data.json";
-            var features = locations.Select(loc => new
-            {
+            var features = locations.Select(loc => new {
                 type = "Feature",
-                geometry = new
-                {
+                geometry = new {
                     type = "Point",
                     coordinates = new[] { loc.Longitude, loc.Latitude, (double)loc.Altitude }
                 },
-                properties = new
-                {
+                properties = new {
                     loc.Timestamp
                 }
             }).ToList();
 
-            var geoJson = new
-            {
+            var geoJson = new {
                 type = "FeatureCollection",
                 features,
-                metadata = new
-                {
+                metadata = new {
                     generated = DateTime.UtcNow.ToString("O"),
                     count = features.Count
                 }
             };
 
-            File.WriteAllText(geoJsonPath, JsonSerializer.Serialize(geoJson, new JsonSerializerOptions
-            {
+            File.WriteAllText(geoJsonPath, JsonSerializer.Serialize(geoJson, new JsonSerializerOptions {
                 WriteIndented = true,
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase
             }));
@@ -284,8 +237,7 @@ namespace PhotoGPSExtractor
         long Timestamp
     );
 
-    internal class ProgressReporter
-    {
+    internal class ProgressReporter {
         private readonly int _total;
         private int _processed;
         private readonly object _lock = new();
@@ -293,10 +245,8 @@ namespace PhotoGPSExtractor
 
         public ProgressReporter(int total) => _total = total;
 
-        public void ReportProgress()
-        {
-            lock (_lock)
-            {
+        public void ReportProgress() {
+            lock (_lock) {
                 _processed++;
                 var now = Stopwatch.GetTimestamp();
 
