@@ -188,15 +188,20 @@ namespace PhotoGPSExtractor {
             await Task.WhenAll(tasks);
         }
 
-        private static void ExportToCsv(List<LocationData> locations) {
+        private static void ExportToCsv(List<LocationData> locations, bool isWgs84 = true) {
             const string csvPath = "data.csv";
             using var writer = new StreamWriter(csvPath);
 
             writer.WriteLine("Latitude,Longitude,Altitude,Timestamp,FileName,FilePath");
             foreach (var loc in locations) {
+                var latitude = loc.Latitude;
+                var longitude = loc.Longitude;
+                if (isWgs84) {
+                    EvilTransform.Transform(loc.Latitude, loc.Longitude, out latitude, out longitude);
+                }
                 var altitude = loc.Altitude != null ? loc.Altitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
                 var timestamp = loc.Timestamp != null ? loc.Timestamp.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
-                writer.WriteLine($"{loc.Latitude},{loc.Longitude},{altitude},{timestamp}");
+                writer.WriteLine($"{latitude},{longitude},{altitude},{timestamp}");
             }
 
             Console.WriteLine($"\nCSV exported to {csvPath}");
