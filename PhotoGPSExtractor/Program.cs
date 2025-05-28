@@ -3,7 +3,6 @@ using MetadataExtractor.Formats.Exif;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
-using Directory = System.IO.Directory;
 
 namespace PhotoGPSExtractor
 {
@@ -72,7 +71,7 @@ namespace PhotoGPSExtractor
                 return null;
             }
 
-            if (!Directory.Exists(input))
+            if (!System.IO.Directory.Exists(input))
             {
                 Console.WriteLine("Directory does not exist!");
                 return null;
@@ -92,7 +91,7 @@ namespace PhotoGPSExtractor
 
             await Task.Run(() =>
             {
-                Parallel.ForEach(Directory.EnumerateFiles(folderPath, "*.*", FastEnumerationOptions), file =>
+                Parallel.ForEach(System.IO.Directory.EnumerateFiles(folderPath, "*.*", FastEnumerationOptions), file =>
                 {
                     if (PhotoExtensions.Contains(Path.GetExtension(file)))
                     {
