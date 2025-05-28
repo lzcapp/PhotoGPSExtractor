@@ -176,10 +176,8 @@ namespace PhotoGPSExtractor {
         }
 
         private static async Task ExportResultsAsync(List<LocationData> locations) {
-            var tasks = new List<Task>
-            {
-                Task.Run(() =>
-                {
+            var tasks = new List<Task> {
+                Task.Run(() => {
                     ExportToCsv(locations);
                     ExportToGeoJson(DeduplicateLocations(locations, 4));
                 })
