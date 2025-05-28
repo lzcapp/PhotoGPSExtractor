@@ -11,7 +11,7 @@ namespace Excel2GeoJson {
 
     public static class Program {
         public static void Main() {
-            ExcelPackage.License.SetNonCommercialPersonal("Laurence");
+            ExcelPackage.License.SetNonCommercialPersonal("Seeleo");
 
             var excelFilePath = "data.xlsx";
             var outputJsonPath = "data.json";

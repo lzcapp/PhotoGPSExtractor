@@ -3,9 +3,10 @@ using GeoJSON.Net.Geometry;
 using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
 using Newtonsoft.Json;
+using OfficeOpenXml;
+using OfficeOpenXml.Style;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Globalization;
 using Directory = System.IO.Directory;
 
 namespace PhotoGPSExtractor {
@@ -38,7 +39,7 @@ namespace PhotoGPSExtractor {
                 var (locations, processingTime) = await ProcessFilesAsync(files);
 
                 // Phase 3: Export results
-                await ExportResultsAsync(locations);
+                await ExportResultsAsync(locations, folderPath);
 
                 Console.WriteLine($"\nCompleted in {stopwatch.Elapsed.TotalSeconds:0.00}s");
                 Console.WriteLine($"- Discovery: {discoveryTime.TotalSeconds:0.00}s");
@@ -65,7 +66,6 @@ namespace PhotoGPSExtractor {
 
             Console.WriteLine("Directory does not exist!");
             return null;
-
         }
 
         private static async Task<(List<string> Files, TimeSpan DiscoveryTime)> FindPhotoFilesAsync(string folderPath) {
@@ -178,16 +178,17 @@ namespace PhotoGPSExtractor {
             return result;
         }
 
-        private static async Task ExportResultsAsync(List<LocationData> locations) {
+        private static async Task ExportResultsAsync(List<LocationData> locations, string folderPath) {
             var tasks = new List<Task> {
                 Task.Run(() => {
-                    ExportToCsv(locations);
-                    ExportToGeoJson(DeduplicateLocations(locations, 4));
+                    ExportToExcel(locations, folderPath);
+                    ExportToGeoJson(DeduplicateLocations(locations, 4), folderPath);
                 })
             };
             await Task.WhenAll(tasks);
         }
 
+        /*
         private static void ExportToCsv(List<LocationData> locations, bool isWgs84 = true) {
             const string csvPath = "data.csv";
             using var writer = new StreamWriter(csvPath);
@@ -199,16 +200,59 @@ namespace PhotoGPSExtractor {
                 if (isWgs84) {
                     EvilTransform.Transform(location.Latitude, location.Longitude, out latitude, out longitude);
                 }
-                var altitude = location.Altitude != null ? location.Altitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
-                var timestamp = location.Timestamp != null ? location.Timestamp.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+
+                var altitude = location.Altitude != null
+                    ? location.Altitude.Value.ToString(CultureInfo.InvariantCulture)
+                    : string.Empty;
+                var timestamp = location.Timestamp != null
+                    ? location.Timestamp.Value.ToString(CultureInfo.InvariantCulture)
+                    : string.Empty;
                 writer.WriteLine($"{latitude},{longitude},{altitude},{timestamp}");
             }
 
             Console.WriteLine($"\nCSV exported to {csvPath}");
         }
+        */
 
-        private static void ExportToGeoJson(List<LocationData> locations, bool isWgs84 = true) {
-            const string jsonPath = "data.json";
+        private static void ExportToExcel(List<LocationData> locations, string filePath) {
+            ExcelPackage.License.SetNonCommercialPersonal("Seeleo");
+
+            using var package = new ExcelPackage();
+            var worksheet = package.Workbook.Worksheets.Add("Data");
+
+            // 设置表头样式
+            using (var headerRange = worksheet.Cells[1, 1, 1, 6]) {
+                headerRange.Style.Font.Bold = true;
+                headerRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
+                headerRange.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightGray);
+            }
+
+            // 写入表头
+            worksheet.Cells[1, 1].Value = "Latitude";
+            worksheet.Cells[1, 2].Value = "Longitude";
+            worksheet.Cells[1, 3].Value = "Altitude";
+            worksheet.Cells[1, 4].Value = "Timestamp";
+
+            // 写入数据
+            for (var i = 0; i < locations.Count; i++) {
+                var row = i + 2;
+                worksheet.Cells[row, 1].Value = locations[i].Latitude;
+                worksheet.Cells[row, 2].Value = locations[i].Longitude;
+                worksheet.Cells[row, 3].Value = locations[i].Altitude;
+                worksheet.Cells[row, 4].Value = locations[i].Timestamp;
+            }
+
+            // 自动调整列宽
+            worksheet.Cells[worksheet.Dimension.Address].AutoFitColumns();
+
+            // 保存文件
+            filePath = Path.Combine(filePath, "data.xlsx");
+            package.SaveAs(new FileInfo(filePath));
+            
+            Console.WriteLine($"\nExcel exported to {filePath}");
+        }
+
+        private static void ExportToGeoJson(List<LocationData> locations, string filePath, bool isWgs84 = true) {
             var featureCollection = new List<Feature>();
 
             foreach (var location in locations) {
@@ -218,6 +262,7 @@ namespace PhotoGPSExtractor {
                 if (isWgs84) {
                     EvilTransform.Transform(latitude, longitude, out latitude, out longitude);
                 }
+
                 double? altitude = location.Altitude == null ? null : Convert.ToDouble(location.Altitude);
                 var position = new Position(location.Latitude, location.Longitude, altitude);
                 var geoPoint = new Point(position);
@@ -229,14 +274,16 @@ namespace PhotoGPSExtractor {
                         { "timestamp", location.Timestamp }
                     };
                 }
+
                 var feature = new Feature(geoPoint, properties);
                 featureCollection.Add(feature);
             }
 
             var json = JsonConvert.SerializeObject(new FeatureCollection(featureCollection), Formatting.Indented);
-            File.WriteAllText(jsonPath, json);
+            filePath = Path.Combine(filePath, "data.geojson");
+            File.WriteAllText(filePath, json);
 
-            Console.WriteLine($"\nGeoJSON exported to {jsonPath}");
+            Console.WriteLine($"\nGeoJSON exported to {filePath}");
         }
     }
 
