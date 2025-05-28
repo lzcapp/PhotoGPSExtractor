@@ -2,19 +2,20 @@
 using MetadataExtractor.Formats.Exif;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
 using Directory = System.IO.Directory;
 
 namespace PhotoGPSExtractor
 {
     public static class Program
     {
-        private readonly static HashSet<string> PhotoExtensions = new(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> PhotoExtensions = new(StringComparer.OrdinalIgnoreCase)
         {
             ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff",
             ".heic", ".webp", ".arw", ".cr2", ".nef", ".orf", ".raf", ".dng"
         };
 
-        private readonly static EnumerationOptions FastEnumerationOptions = new()
+        private static readonly EnumerationOptions FastEnumerationOptions = new()
         {
             IgnoreInaccessible = true,
             RecurseSubdirectories = true,
@@ -26,12 +27,12 @@ namespace PhotoGPSExtractor
         {
             Console.WriteLine("Photo GPS Metadata Extractor");
             Console.WriteLine("----------------------------");
-            
+
             var folderPath = GetFolderPath();
             if (folderPath == null) return;
 
             var stopwatch = Stopwatch.StartNew();
-            
+
             try
             {
                 // Phase 1: Parallel file discovery
@@ -64,7 +65,7 @@ namespace PhotoGPSExtractor
         {
             Console.Write("Folder path (or drag folder here): ");
             var input = Console.ReadLine()?.Trim('"').Trim();
-            
+
             if (string.IsNullOrWhiteSpace(input))
             {
                 Console.WriteLine("No path provided");
@@ -84,7 +85,7 @@ namespace PhotoGPSExtractor
         {
             Console.WriteLine("\nDiscovering photo files...");
             var stopwatch = Stopwatch.StartNew();
-            
+
             var files = new ConcurrentBag<string>();
             var lastReport = Stopwatch.GetTimestamp();
             var totalFiles = 0;
@@ -112,11 +113,12 @@ namespace PhotoGPSExtractor
             return (files.ToList(), stopwatch.Elapsed);
         }
 
-        private static async Task<(List<LocationData> Locations, TimeSpan ProcessingTime)> ProcessFilesAsync(List<string> files)
+        private static async Task<(List<LocationData> Locations, TimeSpan ProcessingTime)> ProcessFilesAsync(
+            List<string> files)
         {
             Console.WriteLine("\n\nProcessing files...");
             var stopwatch = Stopwatch.StartNew();
-            
+
             var locations = new ConcurrentBag<LocationData>();
             var progress = new ProgressReporter(files.Count);
             var options = new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount };
@@ -162,7 +164,7 @@ namespace PhotoGPSExtractor
             {
                 altitude = Math.Abs((decimal)gps.GetDouble(GpsDirectory.TagAltitude));
                 if (gps.GetDescription(GpsDirectory.TagAltitudeRef)?
-                    .Trim().Equals("Below sea level", StringComparison.OrdinalIgnoreCase) == true)
+                        .Trim().Equals("Below sea level", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     altitude *= -1;
                 }
@@ -180,30 +182,99 @@ namespace PhotoGPSExtractor
                 location.Latitude,
                 location.Longitude,
                 altitude,
-                timestamp,
-                Path.GetFileName(filePath),
-                filePath
+                timestamp
             );
+        }
+
+        private static List<LocationData> DeduplicateLocations(List<LocationData> locations, int precision = 6)
+        {
+            var uniqueKeys = new HashSet<Tuple<double, double>>();
+            var result = new List<LocationData>();
+
+            foreach (var loc in locations)
+            {
+                // 精度缩减
+                var roundedLat = Math.Round(loc.Latitude, precision);
+                var roundedLon = Math.Round(loc.Longitude, precision);
+                var key = Tuple.Create(roundedLat, roundedLon);
+
+                // 去重判断
+                if (uniqueKeys.Add(key))
+                {
+                    result.Add(new LocationData(
+                        roundedLat,
+                        roundedLon,
+                        loc.Altitude,
+                        loc.Timestamp
+                    ));
+                }
+            }
+
+            return result;
         }
 
         private static async Task ExportResultsAsync(List<LocationData> locations)
         {
-            var tasks = new List<Task> { Task.Run(() => ExportToCsv(locations)) };
+            var tasks = new List<Task>
+            {
+                Task.Run(() =>
+                {
+                    ExportToCsv(locations);
+                    ExportToGeoJson(DeduplicateLocations(locations, 4));
+                })
+            };
             await Task.WhenAll(tasks);
         }
 
         private static void ExportToCsv(List<LocationData> locations)
         {
-            var csvPath = "photo_gps_data.csv";
+            const string csvPath = "data.csv";
             using var writer = new StreamWriter(csvPath);
-            
+
             writer.WriteLine("Latitude,Longitude,Altitude,Timestamp,FileName,FilePath");
             foreach (var loc in locations)
             {
-                writer.WriteLine($"{loc.Latitude},{loc.Longitude},{loc.Altitude},{loc.Timestamp},\"{loc.FileName}\",\"{loc.FilePath}\"");
+                writer.WriteLine($"{loc.Latitude},{loc.Longitude},{loc.Altitude},{loc.Timestamp}");
             }
-            
+
             Console.WriteLine($"\nCSV exported to {csvPath}");
+        }
+
+        private static void ExportToGeoJson(List<LocationData> locations)
+        {
+            var geoJsonPath = "data.json";
+            var features = locations.Select(loc => new
+            {
+                type = "Feature",
+                geometry = new
+                {
+                    type = "Point",
+                    coordinates = new[] { loc.Longitude, loc.Latitude, (double)loc.Altitude }
+                },
+                properties = new
+                {
+                    loc.Timestamp
+                }
+            }).ToList();
+
+            var geoJson = new
+            {
+                type = "FeatureCollection",
+                features,
+                metadata = new
+                {
+                    generated = DateTime.UtcNow.ToString("O"),
+                    count = features.Count
+                }
+            };
+
+            File.WriteAllText(geoJsonPath, JsonSerializer.Serialize(geoJson, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            }));
+
+            Console.WriteLine($"\nGeoJSON exported to {geoJsonPath}");
         }
     }
 
@@ -211,9 +282,7 @@ namespace PhotoGPSExtractor
         double Latitude,
         double Longitude,
         decimal Altitude,
-        long Timestamp,
-        string FileName,
-        string FilePath
+        long Timestamp
     );
 
     internal class ProgressReporter
@@ -231,7 +300,7 @@ namespace PhotoGPSExtractor
             {
                 _processed++;
                 var now = Stopwatch.GetTimestamp();
-                
+
                 if (now - _lastReportTime > Stopwatch.Frequency / 2) // Throttle to 2 updates/sec
                 {
                     Console.Write($"\rProcessed {_processed} of {_total} ({_processed * 100 / _total}%)...");
