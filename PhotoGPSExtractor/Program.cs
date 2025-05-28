@@ -1,8 +1,10 @@
-﻿using MetadataExtractor;
+﻿using GeoJSON.Net.Feature;
+using GeoJSON.Net.Geometry;
+using MetadataExtractor;
 using MetadataExtractor.Formats.Exif;
+using Newtonsoft.Json;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text.Json;
 
 namespace PhotoGPSExtractor {
     public static class Program {
@@ -73,16 +75,13 @@ namespace PhotoGPSExtractor {
 
             await Task.Run(() => {
                 Parallel.ForEach(System.IO.Directory.EnumerateFiles(folderPath, "*.*", FastEnumerationOptions), file => {
-                    var directories = ImageMetadataReader.ReadMetadata(file);
-                    if (directories.Any(d => d is ExifIfd0Directory or ExifSubIfdDirectory)) {
-                        files.Add(file);
-                        totalFiles = files.Count;
+                    files.Add(file);
+                    totalFiles = files.Count;
 
-                        // Throttled progress reporting
-                        if (Stopwatch.GetTimestamp() - lastReport > Stopwatch.Frequency / 4) {
-                            Console.Write($"\rFound {totalFiles} files...");
-                            lastReport = Stopwatch.GetTimestamp();
-                        }
+                    // Throttled progress reporting
+                    if (Stopwatch.GetTimestamp() - lastReport > Stopwatch.Frequency / 4) {
+                        Console.Write($"\rFound {totalFiles} files...");
+                        lastReport = Stopwatch.GetTimestamp();
                     }
                 });
             });
@@ -194,30 +193,27 @@ namespace PhotoGPSExtractor {
 
         private static void ExportToGeoJson(List<LocationData> locations) {
             var geoJsonPath = "data.json";
-            var features = locations.Select(loc => new {
-                type = "Feature",
-                geometry = new {
-                    type = "Point",
-                    coordinates = new[] { loc.Longitude, loc.Latitude, (double)loc.Altitude }
-                },
-                properties = new {
-                    loc.Timestamp
-                }
-            }).ToList();
+            var featureCollection = new List<Feature>();
 
-            var geoJson = new {
-                type = "FeatureCollection",
-                features,
-                metadata = new {
-                    generated = DateTime.UtcNow.ToString("O"),
-                    count = features.Count
-                }
-            };
+            foreach (var location in locations) {
+                // Create the geometry point
+                var altitude = Convert.ToDouble(location.Latitude);
+                var position = new Position(location.Latitude, location.Longitude, altitude);
+                var geoPoint = new Point(position);
 
-            File.WriteAllText(geoJsonPath, JsonSerializer.Serialize(geoJson, new JsonSerializerOptions {
-                WriteIndented = true,
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-            }));
+                // Create properties dictionary
+                var properties = new Dictionary<string, object>
+                {
+                    { "timestamp", location.Timestamp }
+                };
+
+                // Create feature with geometry and properties
+                var feature = new Feature(geoPoint, properties);
+                featureCollection.Add(feature);
+            }
+
+            var json = JsonConvert.SerializeObject(featureCollection, Formatting.Indented);
+            File.WriteAllText(geoJsonPath, json);
 
             Console.WriteLine($"\nGeoJSON exported to {geoJsonPath}");
         }
