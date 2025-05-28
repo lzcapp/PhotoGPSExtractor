@@ -7,11 +7,15 @@ using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using NetTopologySuite.Geometries;
 using Directory = System.IO.Directory;
+using Point = GeoJSON.Net.Geometry.Point;
 
 namespace PhotoGPSExtractor {
     public static class Program {
-        private readonly static EnumerationOptions FastEnumerationOptions = new() {
+        private static ChinaBorderChecker borderChecker;
+
+        private static readonly EnumerationOptions FastEnumerationOptions = new() {
             IgnoreInaccessible = true,
             RecurseSubdirectories = true,
             MatchCasing = MatchCasing.CaseInsensitive,
@@ -28,6 +32,8 @@ namespace PhotoGPSExtractor {
             var stopwatch = Stopwatch.StartNew();
 
             try {
+                borderChecker = new ChinaBorderChecker("china_border.json"); 
+
                 // Phase 1: Parallel file discovery
                 var (files, discoveryTime) = await FindPhotoFilesAsync(folderPath);
                 if (files.Count == 0) {
@@ -82,10 +88,12 @@ namespace PhotoGPSExtractor {
                     totalFiles = files.Count;
 
                     // Throttled progress reporting
-                    if (Stopwatch.GetTimestamp() - lastReport > Stopwatch.Frequency / 4) {
-                        Console.Write($"\rFound {totalFiles} files...");
-                        lastReport = Stopwatch.GetTimestamp();
+                    if (Stopwatch.GetTimestamp() - lastReport <= Stopwatch.Frequency / 4) {
+                        return;
                     }
+
+                    Console.Write($"\rFound {totalFiles} files...");
+                    lastReport = Stopwatch.GetTimestamp();
                 });
             });
 
@@ -93,8 +101,7 @@ namespace PhotoGPSExtractor {
             return (files.ToList(), stopwatch.Elapsed);
         }
 
-        private static async Task<(List<LocationData> Locations, TimeSpan ProcessingTime)> ProcessFilesAsync(
-            List<string> files) {
+        private static async Task<(List<LocationData> Locations, TimeSpan ProcessingTime)> ProcessFilesAsync(List<string> files) {
             Console.WriteLine("\n\nProcessing files...");
             var stopwatch = Stopwatch.StartNew();
 
@@ -120,7 +127,7 @@ namespace PhotoGPSExtractor {
             return (locations.OrderBy(l => l.Timestamp).ToList(), stopwatch.Elapsed);
         }
 
-        private static LocationData? ProcessSingleFile(string filePath) {
+        private static LocationData? ProcessSingleFile(string filePath, bool isWgs84 = true) {
             var directories = ImageMetadataReader.ReadMetadata(filePath);
             var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
 
@@ -156,7 +163,14 @@ namespace PhotoGPSExtractor {
                 // ignored
             }
 
-            return new LocationData(location.Latitude, location.Longitude, altitude, timestamp);
+
+            var latitude = location.Latitude;
+            var longitude = location.Longitude;
+            if (isWgs84 && borderChecker.IsPointInChina(new Coordinate(latitude, longitude))) {
+                EvilTransform.Transform(location.Latitude, location.Longitude, out latitude, out longitude);
+            }
+
+            return new LocationData(latitude, longitude, altitude, timestamp);
         }
 
         private static List<LocationData> DeduplicateLocations(List<LocationData> locations, int precision = 6) {
@@ -251,19 +265,16 @@ namespace PhotoGPSExtractor {
             Console.WriteLine($"\nExcel exported to {filePath}");
         }
 
-        private static void ExportToGeoJson(List<LocationData> locations, string filePath, bool isWgs84 = true) {
+        private static void ExportToGeoJson(List<LocationData> locations, string filePath) {
             var featureCollection = new List<Feature>();
 
             foreach (var location in locations) {
                 // Create the geometry point
                 var latitude = location.Latitude;
                 var longitude = location.Longitude;
-                if (isWgs84) {
-                    EvilTransform.Transform(latitude, longitude, out latitude, out longitude);
-                }
 
                 double? altitude = location.Altitude == null ? null : Convert.ToDouble(location.Altitude);
-                var position = new Position(location.Latitude, location.Longitude, altitude);
+                var position = new Position(latitude, longitude, altitude);
                 var geoPoint = new Point(position);
 
                 // Create properties dictionary
