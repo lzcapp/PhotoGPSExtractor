@@ -163,12 +163,7 @@ namespace PhotoGPSExtractor {
 
                 // 去重判断
                 if (uniqueKeys.Add(key)) {
-                    result.Add(new LocationData(
-                        roundedLat,
-                        roundedLon,
-                        loc.Altitude,
-                        loc.Timestamp
-                    ));
+                    result.Add(loc with { Latitude = roundedLat, Longitude = roundedLon });
                 }
             }
 
