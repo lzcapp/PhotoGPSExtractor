@@ -5,6 +5,8 @@ using MetadataExtractor.Formats.Exif;
 using Newtonsoft.Json;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Globalization;
+using Directory = System.IO.Directory;
 
 namespace PhotoGPSExtractor {
     public static class Program {
@@ -57,12 +59,13 @@ namespace PhotoGPSExtractor {
                 return null;
             }
 
-            if (!System.IO.Directory.Exists(input)) {
-                Console.WriteLine("Directory does not exist!");
-                return null;
+            if (Directory.Exists(input)) {
+                return input;
             }
 
-            return input;
+            Console.WriteLine("Directory does not exist!");
+            return null;
+
         }
 
         private static async Task<(List<string> Files, TimeSpan DiscoveryTime)> FindPhotoFilesAsync(string folderPath) {
@@ -74,7 +77,7 @@ namespace PhotoGPSExtractor {
             var totalFiles = 0;
 
             await Task.Run(() => {
-                Parallel.ForEach(System.IO.Directory.EnumerateFiles(folderPath, "*.*", FastEnumerationOptions), file => {
+                Parallel.ForEach(Directory.EnumerateFiles(folderPath, "*.*", FastEnumerationOptions), file => {
                     files.Add(file);
                     totalFiles = files.Count;
 
@@ -106,8 +109,8 @@ namespace PhotoGPSExtractor {
                         if (location != null) {
                             locations.Add(location);
                         }
-                    } catch (Exception ex) {
-                        Debug.WriteLine($"Error processing {file}: {ex.Message}");
+                    } catch (Exception) {
+                        //Debug.WriteLine($"Error processing {file}: {ex.Message}");
                     } finally {
                         progress.ReportProgress();
                     }
@@ -120,34 +123,40 @@ namespace PhotoGPSExtractor {
         private static LocationData? ProcessSingleFile(string filePath) {
             var directories = ImageMetadataReader.ReadMetadata(filePath);
             var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
-            if (gps == null) return null;
 
-            var location = gps.GetGeoLocation();
+            var location = gps?.GetGeoLocation();
             if (location == null) return null;
 
             // Extract altitude
-            decimal altitude = 0;
-            if (gps.ContainsTag(GpsDirectory.TagAltitude)) {
-                altitude = Math.Abs((decimal)gps.GetDouble(GpsDirectory.TagAltitude));
-                if (gps.GetDescription(GpsDirectory.TagAltitudeRef)?
-                        .Trim().Equals("Below sea level", StringComparison.OrdinalIgnoreCase) == true) {
-                    altitude *= -1;
+            decimal? altitude = null;
+            try {
+                if (gps != null && gps.ContainsTag(GpsDirectory.TagAltitude)) {
+                    altitude = Math.Abs((decimal)gps.GetDouble(GpsDirectory.TagAltitude));
+                    var intAltitudeRef = gps.GetInt32(GpsDirectory.TagAltitudeRef);
+                    var strAltitudeRef = gps.GetDescription(GpsDirectory.TagAltitudeRef) ?? string.Empty;
+                    if (intAltitudeRef == 1 ||
+                        strAltitudeRef.Equals("Below sea level", StringComparison.OrdinalIgnoreCase)) {
+                        altitude *= -1;
+                    }
                 }
+            } catch (Exception) {
+                // ignored
             }
 
             // Extract timestamp
             long timestamp = 0;
-            var exifSub = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
-            if (exifSub?.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dt) == true) {
-                timestamp = new DateTimeOffset(dt).ToUnixTimeMilliseconds();
+            try {
+                var exifSub = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+                if (exifSub?.TryGetDateTime(ExifDirectoryBase.TagDateTimeOriginal, out var dt) == true ||
+                    exifSub?.TryGetDateTime(ExifDirectoryBase.TagDateTimeDigitized, out dt) == true ||
+                    exifSub?.TryGetDateTime(ExifDirectoryBase.TagDateTime, out dt) == true) {
+                    timestamp = new DateTimeOffset(dt).ToUnixTimeSeconds();
+                }
+            } catch (Exception) {
+                // ignored
             }
 
-            return new LocationData(
-                location.Latitude,
-                location.Longitude,
-                altitude,
-                timestamp
-            );
+            return new LocationData(location.Latitude, location.Longitude, altitude, timestamp);
         }
 
         private static List<LocationData> DeduplicateLocations(List<LocationData> locations, int precision = 6) {
@@ -185,52 +194,54 @@ namespace PhotoGPSExtractor {
 
             writer.WriteLine("Latitude,Longitude,Altitude,Timestamp,FileName,FilePath");
             foreach (var loc in locations) {
-                writer.WriteLine($"{loc.Latitude},{loc.Longitude},{loc.Altitude},{loc.Timestamp}");
+                var altitude = loc.Altitude != null ? loc.Altitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+                var timestamp = loc.Timestamp != null ? loc.Timestamp.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+                writer.WriteLine($"{loc.Latitude},{loc.Longitude},{altitude},{timestamp}");
             }
 
             Console.WriteLine($"\nCSV exported to {csvPath}");
         }
 
         private static void ExportToGeoJson(List<LocationData> locations) {
-            var geoJsonPath = "data.json";
+            const string jsonPath = "data.json";
             var featureCollection = new List<Feature>();
 
             foreach (var location in locations) {
                 // Create the geometry point
-                var altitude = Convert.ToDouble(location.Latitude);
+                double? altitude = location.Altitude == null ? null : Convert.ToDouble(location.Altitude);
                 var position = new Position(location.Latitude, location.Longitude, altitude);
                 var geoPoint = new Point(position);
 
                 // Create properties dictionary
-                var properties = new Dictionary<string, object>
-                {
-                    { "timestamp", location.Timestamp }
-                };
-
-                // Create feature with geometry and properties
+                Dictionary<string, object>? properties = null;
+                if (location.Timestamp != null) {
+                    properties = new Dictionary<string, object> {
+                        { "timestamp", location.Timestamp }
+                    };
+                }
                 var feature = new Feature(geoPoint, properties);
                 featureCollection.Add(feature);
             }
 
-            var json = JsonConvert.SerializeObject(featureCollection, Formatting.Indented);
-            File.WriteAllText(geoJsonPath, json);
+            var json = JsonConvert.SerializeObject(new FeatureCollection(featureCollection), Formatting.Indented);
+            File.WriteAllText(jsonPath, json);
 
-            Console.WriteLine($"\nGeoJSON exported to {geoJsonPath}");
+            Console.WriteLine($"\nGeoJSON exported to {jsonPath}");
         }
     }
 
     internal record LocationData(
         double Latitude,
         double Longitude,
-        decimal Altitude,
-        long Timestamp
+        decimal? Altitude,
+        long? Timestamp
     );
 
     internal class ProgressReporter {
-        private readonly int _total;
-        private int _processed;
         private readonly object _lock = new();
+        private readonly int _total;
         private long _lastReportTime;
+        private int _processed;
 
         public ProgressReporter(int total) => _total = total;
 
@@ -239,11 +250,13 @@ namespace PhotoGPSExtractor {
                 _processed++;
                 var now = Stopwatch.GetTimestamp();
 
-                if (now - _lastReportTime > Stopwatch.Frequency / 2) // Throttle to 2 updates/sec
-                {
-                    Console.Write($"\rProcessed {_processed} of {_total} ({_processed * 100 / _total}%)...");
-                    _lastReportTime = now;
+                // Throttle to 2 updates/sec
+                if (now - _lastReportTime <= Stopwatch.Frequency / 2) {
+                    return;
                 }
+
+                Console.Write($"\rProcessed {_processed} of {_total} ({_processed * 100 / _total}%)...");
+                _lastReportTime = now;
             }
         }
     }
