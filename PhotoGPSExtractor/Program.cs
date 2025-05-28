@@ -193,26 +193,31 @@ namespace PhotoGPSExtractor {
             using var writer = new StreamWriter(csvPath);
 
             writer.WriteLine("Latitude,Longitude,Altitude,Timestamp,FileName,FilePath");
-            foreach (var loc in locations) {
-                var latitude = loc.Latitude;
-                var longitude = loc.Longitude;
+            foreach (var location in locations) {
+                var latitude = location.Latitude;
+                var longitude = location.Longitude;
                 if (isWgs84) {
-                    EvilTransform.Transform(loc.Latitude, loc.Longitude, out latitude, out longitude);
+                    EvilTransform.Transform(location.Latitude, location.Longitude, out latitude, out longitude);
                 }
-                var altitude = loc.Altitude != null ? loc.Altitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
-                var timestamp = loc.Timestamp != null ? loc.Timestamp.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+                var altitude = location.Altitude != null ? location.Altitude.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
+                var timestamp = location.Timestamp != null ? location.Timestamp.Value.ToString(CultureInfo.InvariantCulture) : string.Empty;
                 writer.WriteLine($"{latitude},{longitude},{altitude},{timestamp}");
             }
 
             Console.WriteLine($"\nCSV exported to {csvPath}");
         }
 
-        private static void ExportToGeoJson(List<LocationData> locations) {
+        private static void ExportToGeoJson(List<LocationData> locations, bool isWgs84 = true) {
             const string jsonPath = "data.json";
             var featureCollection = new List<Feature>();
 
             foreach (var location in locations) {
                 // Create the geometry point
+                var latitude = location.Latitude;
+                var longitude = location.Longitude;
+                if (isWgs84) {
+                    EvilTransform.Transform(latitude, longitude, out latitude, out longitude);
+                }
                 double? altitude = location.Altitude == null ? null : Convert.ToDouble(location.Altitude);
                 var position = new Position(location.Latitude, location.Longitude, altitude);
                 var geoPoint = new Point(position);
