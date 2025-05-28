@@ -224,7 +224,6 @@ namespace PhotoGPSExtractor {
             using (var headerRange = worksheet.Cells[1, 1, 1, 6]) {
                 headerRange.Style.Font.Bold = true;
                 headerRange.Style.Fill.PatternType = ExcelFillStyle.Solid;
-                headerRange.Style.Fill.BackgroundColor.SetColor(System.Drawing.Color.LightGray);
             }
 
             // 写入表头

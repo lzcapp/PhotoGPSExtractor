@@ -5,19 +5,19 @@
         <TargetFramework>net6.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <StartupObject>PhotoGPSExtractor.Program</StartupObject>
+        <StartupObject></StartupObject>
     </PropertyGroup>
 
     <ItemGroup>
-        <None Remove=".gitattributes"/>
-        <None Remove=".gitignore"/>
-        <None Remove="README.md"/>
+        <None Remove=".gitattributes" />
+        <None Remove=".gitignore" />
+        <None Remove="README.md" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="EPPlus" Version="8.0.5" />
-        <PackageReference Include="GeoJSON.Net" Version="1.4.1"/>
-        <PackageReference Include="MetadataExtractor" Version="2.8.1"/>
+        <PackageReference Include="GeoJSON.Net" Version="1.4.1" />
+        <PackageReference Include="MetadataExtractor" Version="2.8.1" />
     </ItemGroup>
 
 </Project>
