@@ -2,19 +2,16 @@
 using GeoJSON.Net.Geometry;
 using Newtonsoft.Json;
 using OfficeOpenXml;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Excel2GeoJson {
-    // Required NuGet packages:
-// - EPPlus
-// - Newtonsoft.Json
-// - GeoJSON.Net
-
     public static class Program {
         public static void Main() {
+            // ReSharper disable once StringLiteralTypo
             ExcelPackage.License.SetNonCommercialPersonal("Seeleo");
 
-            var excelFilePath = "data.xlsx";
-            var outputJsonPath = "data.json";
+            const string excelFilePath = "data.xlsx";
+            const string outputJsonPath = "data.json";
 
             var points = ReadPointsFromExcel(excelFilePath);
             var featureCollection = CreateGeoJsonFeatureCollection(points);
@@ -54,6 +51,7 @@ namespace Excel2GeoJson {
         private static FeatureCollection CreateGeoJsonFeatureCollection(List<GeoPoint> points) {
             var features = new List<Feature>();
 
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var point in points) {
                 // Create the geometry point
                 var position = new Position(point.Latitude, point.Longitude, point.Altitude);
@@ -73,6 +71,7 @@ namespace Excel2GeoJson {
         }
     }
 
+    [SuppressMessage("ReSharper", "PropertyCanBeMadeInitOnly.Global")]
     public class GeoPoint {
         public double Latitude { get; set; }
         public double Longitude { get; set; }

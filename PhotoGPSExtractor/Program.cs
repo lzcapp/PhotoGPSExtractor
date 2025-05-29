@@ -7,7 +7,6 @@ using OfficeOpenXml;
 using OfficeOpenXml.Style;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using NetTopologySuite.Geometries;
 using Directory = System.IO.Directory;
 using Point = GeoJSON.Net.Geometry.Point;
 
@@ -174,6 +173,7 @@ namespace PhotoGPSExtractor {
             var uniqueKeys = new HashSet<Tuple<double, double>>();
             var result = new List<LocationData>();
 
+            // ReSharper disable once ForeachCanBeConvertedToQueryUsingAnotherGetEnumerator
             foreach (var loc in locations) {
                 // 精度缩减
                 var roundedLat = Math.Round(loc.Latitude, precision);
@@ -226,6 +226,7 @@ namespace PhotoGPSExtractor {
         */
 
         private static void ExportToExcel(List<LocationData> locations, string filePath) {
+            // ReSharper disable once StringLiteralTypo
             ExcelPackage.License.SetNonCommercialPersonal("Seeleo");
 
             using var package = new ExcelPackage();
