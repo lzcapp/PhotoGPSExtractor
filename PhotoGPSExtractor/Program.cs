@@ -13,8 +13,7 @@ using Point = GeoJSON.Net.Geometry.Point;
 
 namespace PhotoGPSExtractor {
     public static class Program {
-        private static ChinaBorderChecker borderChecker;
-
+        // ReSharper disable once ArrangeModifiersOrder
         private static readonly EnumerationOptions FastEnumerationOptions = new() {
             IgnoreInaccessible = true,
             RecurseSubdirectories = true,
@@ -32,8 +31,6 @@ namespace PhotoGPSExtractor {
             var stopwatch = Stopwatch.StartNew();
 
             try {
-                borderChecker = new ChinaBorderChecker("china_border.json"); 
-
                 // Phase 1: Parallel file discovery
                 var (files, discoveryTime) = await FindPhotoFilesAsync(folderPath);
                 if (files.Count == 0) {
@@ -166,7 +163,7 @@ namespace PhotoGPSExtractor {
 
             var latitude = location.Latitude;
             var longitude = location.Longitude;
-            if (isWgs84 && borderChecker.IsPointInChina(new Coordinate(latitude, longitude))) {
+            if (isWgs84) {
                 EvilTransform.Transform(location.Latitude, location.Longitude, out latitude, out longitude);
             }
 
