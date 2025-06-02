@@ -73,7 +73,7 @@ namespace PhotoGPSExtractor {
         }
 
         private static bool GetIsDoEvilTransform() {
-            Console.Write("Do EvilTransform? (Y[es] / N[o])");
+            Console.Write("Do EvilTransform? (Y[es]/N[o]): ");
             var input = Console.ReadLine()?.Trim('"').Trim().ToUpperInvariant();
 
             if (string.IsNullOrWhiteSpace(input)) {
@@ -300,7 +300,7 @@ namespace PhotoGPSExtractor {
                 featureCollection.Add(feature);
             }
 
-            var json = JsonConvert.SerializeObject(new FeatureCollection(featureCollection), Formatting.Indented);
+            var json = JsonConvert.SerializeObject(new FeatureCollection(featureCollection), Formatting.None);
             filePath = Path.Combine(filePath, "data.geojson");
             File.WriteAllText(filePath, json);
 
