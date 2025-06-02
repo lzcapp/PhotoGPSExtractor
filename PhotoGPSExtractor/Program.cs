@@ -304,7 +304,7 @@ namespace PhotoGPSExtractor {
             filePath = Path.Combine(filePath, "data.geojson");
             File.WriteAllText(filePath, json);
 
-            Console.WriteLine($"\nGeoJSON exported to {filePath}");
+            Console.WriteLine($"GeoJSON exported to {filePath}");
         }
     }
 
