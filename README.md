@@ -6,4 +6,4 @@ PhotoGPSExtractor is a highly efficient open-source tool designed to extract ​
 
 ## Screenshot
  
-![Screenshot](https://github.com/user-attachments/assets/2fb0ff89-60d9-42cd-8912-f5cb1e6efc70)
+![Screenshot](https://github.com/user-attachments/assets/f8df0fef-0397-48af-bdbe-27f65fb630ee)
