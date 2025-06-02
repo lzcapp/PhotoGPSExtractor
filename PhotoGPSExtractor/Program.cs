@@ -27,6 +27,8 @@ namespace PhotoGPSExtractor {
             var folderPath = GetFolderPath();
             if (folderPath == null) return;
 
+            var doEvilTransform = GetIsDoEvilTransform();
+
             var stopwatch = Stopwatch.StartNew();
 
             try {
@@ -38,7 +40,7 @@ namespace PhotoGPSExtractor {
                 }
 
                 // Phase 2: Parallel metadata processing
-                var (locations, processingTime) = await ProcessFilesAsync(files);
+                var (locations, processingTime) = await ProcessFilesAsync(files, doEvilTransform);
 
                 // Phase 3: Export results
                 await ExportResultsAsync(locations, folderPath);
@@ -70,6 +72,17 @@ namespace PhotoGPSExtractor {
             return null;
         }
 
+        private static bool GetIsDoEvilTransform() {
+            Console.Write("Do EvilTransform? (Y[es] / N[o])");
+            var input = Console.ReadLine()?.Trim('"').Trim().ToUpperInvariant();
+
+            if (string.IsNullOrWhiteSpace(input)) {
+                return false;
+            }
+
+            return input is "Y" or "YES";
+        }
+
         private static async Task<(List<string> Files, TimeSpan DiscoveryTime)> FindPhotoFilesAsync(string folderPath) {
             Console.WriteLine("\nDiscovering photo files...");
             var stopwatch = Stopwatch.StartNew();
@@ -97,7 +110,7 @@ namespace PhotoGPSExtractor {
             return (files.ToList(), stopwatch.Elapsed);
         }
 
-        private static async Task<(List<LocationData> Locations, TimeSpan ProcessingTime)> ProcessFilesAsync(List<string> files) {
+        private static async Task<(List<LocationData> Locations, TimeSpan ProcessingTime)> ProcessFilesAsync(List<string> files, bool doEvilTransform) {
             Console.WriteLine("\n\nProcessing files...");
             var stopwatch = Stopwatch.StartNew();
 
@@ -108,7 +121,7 @@ namespace PhotoGPSExtractor {
             await Task.Run(() => {
                 Parallel.ForEach(files, options, file => {
                     try {
-                        var location = ProcessSingleFile(file);
+                        var location = ProcessSingleFile(file, doEvilTransform);
                         if (location != null) {
                             locations.Add(location);
                         }
@@ -123,7 +136,7 @@ namespace PhotoGPSExtractor {
             return (locations.OrderBy(l => l.Timestamp).ToList(), stopwatch.Elapsed);
         }
 
-        private static LocationData? ProcessSingleFile(string filePath, bool isWgs84 = true) {
+        private static LocationData? ProcessSingleFile(string filePath, bool doEvilTransform = false) {
             var directories = ImageMetadataReader.ReadMetadata(filePath);
             var gps = directories.OfType<GpsDirectory>().FirstOrDefault();
 
@@ -162,7 +175,7 @@ namespace PhotoGPSExtractor {
 
             var latitude = location.Latitude;
             var longitude = location.Longitude;
-            if (isWgs84) {
+            if (doEvilTransform) {
                 EvilTransform.Transform(location.Latitude, location.Longitude, out latitude, out longitude);
             }
 
